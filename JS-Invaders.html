@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Javascript - Peli</title>
+	
+	<style>
+		
+	</style>
+</head>
+<body onload="showTitleScreen()">
+	<p>
+	Space: Shoot<br>
+	WASD or Arrow keys: fly around
+	</p>
+</table>
+<script src="js/fpsmeter.min.js"></script>
+<script src="script/soundmanager2.js"></script>
+<script>
+	var canvas = document.createElement("canvas");
+	var ctx = canvas.getContext("2d");
+	
+	soundManager.onready(function() 
+	{
+		// SM2 is ready to go!
+		makeSomeNoise(); // soundManager.createSound(), etc.
+	});
+	
+	function makeSomeNoise()
+	{
+		soundManager.createSound
+		({
+			id: 'pShoot',
+			url: 'sound/shoot.wav',
+			autoLoad: true,
+			autoPlay: false,
+			onload: function() 
+			{
+				//alert('The sound '+this.id+' loaded!');
+			},
+			volume: 50
+		});
+		
+		soundManager.createSound
+		({
+			id: 'invalidikilled',
+			url: 'sound/invaderkilled.wav',
+			autoLoad: true,
+			autoPlay: false,
+			onload: function() 
+			{
+				//alert('The sound '+this.id+' loaded!');
+			},
+			volume: 50
+		});
+		
+		soundManager.createSound
+		({
+			id: 'pDied',
+			url: 'sound/explosion.wav',
+			autoLoad: true,
+			autoPlay: false,
+			onload: function() 
+			{
+				//alert('The sound '+this.id+' loaded!');
+			},
+			volume: 50
+		});
+		
+		soundManager.createSound
+		({
+			id: 'geegee',
+			url: 'sound/geegee.wav',
+			autoLoad: true,
+			autoPlay: false,
+			onload: function() 
+			{
+				//alert('The sound '+this.id+' loaded!');
+			},
+			volume: 100
+		});
+		
+		for(var i = 1; i <= 4; i++)
+		{
+			soundManager.createSound
+			({
+				id: 'fastinvader' + i + '',
+				url: 'sound/fastinvader' + i + '.wav',
+				autoLoad: true,
+				autoPlay: false,
+				onload: function() 
+				{
+				//	alert('The sound '+this.id+' loaded!');
+				},
+				volume: 100
+			});
+		}
+	}
+	
+	var meter = new FPSMeter
+	({
+		interval:  100,     // Update interval in milliseconds.
+		smoothing: 10,      // Spike smoothing strength. 1 means no smoothing.
+		show:      'fps',   // Whether to show 'fps', or 'ms' = frame duration in milliseconds.
+		toggleOn:  'click', // Toggle between show 'fps' and 'ms' on this event.
+		decimals:  1,       // Number of decimals in FPS number. 1 = 59.9, 2 = 59.94, ...
+		maxFps:    60,      // Max expected FPS value.
+		threshold: 100,     // Minimal tick reporting interval in milliseconds.
+
+		// Meter position
+		position: 'absolute', // Meter position.
+		zIndex:   10,         // Meter Z index.
+		left:     '520px',    // Meter left offset.
+		top:      '8px',      // Meter top offset.
+		right:    'auto',     // Meter right offset.
+		bottom:   'auto',     // Meter bottom offset.
+		margin:   '0 0 0 0',  // Meter margin. Helps with centering the counter when left: 50%;
+
+		// Theme
+		theme: 'transparent', // Meter theme. Build in: 'dark', 'light', 'transparent', 'colorful'.
+		heat:  1,      // Allow themes to use coloring by FPS heat. 0 FPS = red, maxFps = green.
+
+		// Graph
+		graph:   1, // Whether to show history graph.
+		history: 20 // How many history states to show in a graph.
+	});
+	
+	canvas.width = 352 * 2;
+	canvas.height = 352 * 2;
+	document.body.appendChild(canvas);
+	
+	var monsterReady = false;
+	var monsterImage = new Image();
+	monsterImage.onload = function () 
+	{
+		monsterReady = true;
+	};
+	monsterImage.src = "images/spaceinvaders.png";
+	
+	var titleReady = false;
+	var titleImage = new Image();
+	titleImage.onload = function () 
+	{
+		titleReady = true;
+	};
+	titleImage.src = "images/spaceinvaderstitle.png";
+	
+	var hero = 
+	{
+		speed: 256,
+		x: 0,
+		y: 0,
+		health: 100,
+		canfire: true,
+		invulnerable: false
+	};
+	
+	var keysDown = {};
+	
+	addEventListener("keydown", function (e) 
+	{
+		keysDown[e.keyCode] = true;
+	}, false);
+
+	addEventListener("keyup", function (e) 
+	{
+		delete keysDown[e.keyCode];
+	}, false);
+	
+/*	
+	Scoring
+	Row 1 Invader--5 points
+	Row 2 Invader--10 points
+	Row 3 Invader--15 points
+	Row 4 Invader--20 points
+	Row 5 Invader--25 points
+	Row 6 Invader--30 points
+	Command Alien Ship--200 points, or 100 points in certain game variations
+*/
+
+	var enemies = 
+	[
+		[], //Rivi 1
+		[], //Rivi 2
+		[], //Rivi 3
+		[], //Rivi 4
+		[], //Rivi 5
+		[], //Rivi 6
+		[], //Rivi 7
+		[], //Rivi 8
+		[], //Rivi 9
+		[], //Rivi 10
+		[]  //Rivi 11
+	];
+	
+	var firstPlay = true;
+	
+	var bullet = [];
+	var enemybullet = [];
+	var explosions = [];
+	
+	var points = 0;
+	var strPoints = "0000";
+	var multiplier = 1.0;
+	var nyt = Date.now();
+	var lives = 0;
+	
+	function reset() 
+	{
+		hero.x = canvas.width / 2;
+		hero.y = canvas.height * 0.89;
+	}
+	
+	function showTitleScreen()
+	{
+		ctx.fillStyle = "#000000";
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		ctx.drawImage(titleImage, 0, 0, canvas.width, canvas.height, -160, -100, 1000, 1000);
+		
+		console.log("Show title screen");
+	}
+	
+	function makeInvaders()
+	{
+		for(var b = 0; b < enemies.length; b++)
+		{
+			for(var a = 0; a < 5; a++)
+			{
+				switch(a)
+				{
+					case 0:
+					{
+						enemies[b].push
+						({
+							x: 32 * b,
+							y: 32 * a + 100,
+							health: 25,
+							movedirection: 1,
+							rownumber: 0,
+							spritenum: 0,
+						});
+						break;
+					}
+					case 1:
+					case 2:
+					{
+						enemies[b].push
+						({
+							x: 32 * b,
+							y: 32 * a + 100,
+							health: 25,
+							movedirection: 1,
+							rownumber: 1,
+							spritenum: 0,
+						});
+						break;
+					}
+					case 3:
+					case 4:
+					{
+						enemies[b].push
+						({
+							x: 32 * b,
+							y: 32 * a + 100,
+							health: 25,
+							movedirection: 1,
+							rownumber: 2,
+							spritenum: 0,
+						});
+						break;
+					}
+				}
+			}
+		}
+	}
+	
+	function update(modifier) 
+	{
+		if(13 in keysDown && firstPlay == true)	//Enter
+		{
+			for (var r = 0; r < enemies.length; r++) 	//Rivi
+			{
+				while(enemies[r].length > 0) 
+				{
+					enemies[r].pop();
+				}
+			}
+			
+			while(bullet.length > 0) 
+			{
+				bullet.pop();
+			}
+			
+			makeInvaders();
+			lives = 3;
+			
+			console.log("Start game");
+			reset();
+			
+			firstPlay = false;
+		}
+	
+		if(82 in keysDown && lives <= 0 && firstPlay == false)	//Restart
+		{
+			for (var r = 0; r < enemies.length; r++) 	//Rivi
+			{
+				while(enemies[r].length > 0) 
+				{
+					enemies[r].pop();
+				}
+			}
+			
+			while(bullet.length > 0) 
+			{
+				bullet.pop();
+			}
+			
+			makeInvaders();
+			lives = 3;
+			strPoints = "0000";
+			points = 0;
+			multiplier = 1.0;
+			reset();
+		}
+	
+		if(lives > 0 && firstPlay == false)
+		{
+			var teltta = nyt - then;
+			if(teltta <= 0)
+			{
+				if(enemies[0].length == 0 && enemies[1].length == 0
+				&& enemies[2].length == 0 && enemies[3].length == 0
+				&& enemies[4].length == 0 && enemies[5].length == 0
+				&& enemies[6].length == 0 && enemies[7].length == 0
+				&& enemies[8].length == 0 && enemies[9].length == 0
+				&& enemies[10].length == 0)
+				{
+					lives++;
+					multiplier += 0.5;
+					
+					console.log("Start game");
+					reset();
+					
+					makeInvaders();
+				}
+			
+				for (var r = 0; r < enemies.length; r++) 	//Rivi
+				{		
+					var chance = 0.010 * multiplier;
+					if(chance > Math.random())
+					{
+						if(enemies[r].length > 0)
+						{
+							soundManager.play("pShoot");
+							
+							enemybullet.push
+							({
+								x: enemies[r][enemies[r].length - 1].x + 12.0,
+								y: enemies[r][enemies[r].length - 1].y + 12.0,
+								mdx: 0.0,
+								mdy: -1.0,
+							})
+						}
+					}
+					
+					for (var rp = 0; rp < enemies[r].length; rp++) //Rivipituus
+					{
+						enemies[r][rp].spritenum == 0 ? enemies[r][rp].spritenum = 1 : enemies[r][rp].spritenum = 0;
+					
+						if(enemies[r][rp].y > canvas.height - 64)
+						{
+							soundManager.play("pDied");
+							lives = 0;
+							
+							console.log("ALIENS WIN");
+						}
+						
+						if(enemies[r][rp].x > canvas.width - 40 && enemies[r][rp].movedirection == 1) //Oikea puoli
+						{
+							for(var x = 0; x < enemies.length; x++) 
+							{
+								for(var y = 0; y < enemies[x].length; y++) 
+								{
+									enemies[x][y].y += 32.0;
+									enemies[x][y].movedirection = 0;
+								}
+							}
+						}
+						if(enemies[r][rp].x < 10 && enemies[r][rp].movedirection == 0)
+						{
+							for(var x = 0; x < enemies.length; x++) 
+							{
+								for(var y = 0; y < enemies[x].length; y++) 
+								{
+									enemies[x][y].y += 32.0;
+									enemies[x][y].movedirection = 1;
+								}
+							}
+						}
+					}
+				}
+				
+				var sound = Math.floor((Math.random() * 4) + 1);
+				soundManager.play("fastinvader" + sound + "");
+				
+				for (var r = 0; r < enemies.length; r++) 	//Rivi
+				{
+					for (var rp = 0; rp < enemies[r].length; rp++) //Rivipituus
+					{
+						if(enemies[r][rp].movedirection == 0)
+						{
+							enemies[r][rp].x += -12.0 * multiplier;
+						}
+						else if(enemies[r][rp].movedirection == 1)
+						{
+							enemies[r][rp].x += 12.0 * multiplier;
+						}
+					}
+				}
+				nyt = Date.now() + 500 / multiplier;
+			}
+			
+			if(hero.health > 0)
+			{
+				if (38 in keysDown || 87 in keysDown) 
+				{
+					if(bullet.length == 0)
+					{
+						bullet.push
+						({
+							x: hero.x + 12.0,
+							y: hero.y,
+							mdx: 0.0,
+							mdy: 1.0,
+						})
+						
+						soundManager.play("pShoot");
+					}
+				}
+				if (37 in keysDown || 65 in keysDown) 
+				{
+					hero.x -= hero.speed * modifier;
+				}
+				if (39 in keysDown || 68 in keysDown) 
+				{
+					hero.x += hero.speed * modifier;		
+				}		
+				
+				if(32 in keysDown)
+				{
+					if(bullet.length == 0)
+					{
+						soundManager.play("pShoot");
+						
+						bullet.push
+						({
+							x: hero.x + 12.0,
+							y: hero.y,
+							mdx: 0.0,
+							mdy: 1.0,
+						})
+					}
+				}
+			}
+			
+			CollisionCheck(hero);
+		}
+		meter.tick();
+	}
+
+	function CollisionCheck(element) 
+	{
+		if(element.x > canvas.width - 32) 
+		{
+			element.x = canvas.width - 32;
+		}
+		else if(element.x < 0) 
+		{
+			element.x = 0;
+		}
+	}
+
+	function render() 
+	{	
+		if(firstPlay == false)
+		{
+			ctx.fillStyle = "#000000";
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+			if(monsterReady) 
+			{
+				for(var i = 0; i < explosions.length; i++)
+				{
+					if(explosions[i].lifetime > 0)
+					{
+						explosions[i].lifetime--;
+						ctx.drawImage
+						(
+							monsterImage,					//Specifies the image, canvas, or video element to use
+							32 * 1,							//Optional. The x coordinate where to start clipping
+							32 * 3,							//Optional. The y coordinate where to start clipping
+							32, 							//Optional. The width of the clipped image
+							32,								//Optional. The height of the clipped imag
+							explosions[i].x - 12.0,					//The x coordinate where to place the image on the canvas
+							explosions[i].y - 32.0,					//The y coordinate where to place the image on the canvas
+							32, 							//Optional. The width of the image to use (stretch or reduce the image)
+							32								//Optional. The height of the image to use (stretch or reduce the image)
+						);
+					}
+					else
+					{
+						var index = explosions.indexOf(explosions[i]);
+						if (index > -1)
+							explosions.splice(index, 1);
+					}
+				}
+			
+				if(hero.health != 0 && lives > 0) 
+				{
+					ctx.drawImage
+					(
+						monsterImage,	//Specifies the image, canvas, or video element to use
+						32 * 0,			//Optional. The x coordinate where to start clipping
+						32 * 3,			//Optional. The y coordinate where to start clipping
+						32,				//Optional. The width of the clipped image
+						32,				//Optional. The height of the clipped imag
+						hero.x,			//The x coordinate where to place the image on the canvas
+						hero.y,			//The y coordinate where to place the image on the canvas
+						32, 			//Optional. The width of the image to use (stretch or reduce the image)
+						32				//Optional. The height of the image to use (stretch or reduce the image)
+					);
+				}
+
+				for (var r = 0; r < enemies.length; r++) 	//Rivi
+				{	
+					for (var rp = 0; rp < enemies[r].length; rp++) //Rivipituus
+					{			
+						/*switch(r)
+						{
+							case 0: ctx.fillStyle = "#1abc9c"; break;
+							case 1: ctx.fillStyle = "#2ecc71"; break;
+							case 2: ctx.fillStyle = "#3498db"; break;
+							case 3: ctx.fillStyle = "#9b59b6"; break;
+							case 4: ctx.fillStyle = "#34495e"; break;
+							case 5: ctx.fillStyle = "#f1c40f"; break;
+							case 6: ctx.fillStyle = "#e67e22"; break;
+							case 7: ctx.fillStyle = "#ecf0f1"; break;
+							case 8: ctx.fillStyle = "#e74c3c"; break;
+							case 9: ctx.fillStyle = "#95a5a6"; break;
+							case 10: ctx.fillStyle = "#c0392b"; break;
+							case 11: ctx.fillStyle = "#f39c12"; break;
+						}
+						ctx.fillRect(enemies[r][rp].x, enemies[r][rp].y, 32, 32);
+						
+						ctx.fillStyle = "#FFFFFF";
+						ctx.font = "24px Monospace";
+						ctx.textAlign = "left";
+						ctx.textBaseline = "top";
+						ctx.fillText(r, enemies[r][rp].x + 10, enemies[r][rp].y);*/
+						
+						ctx.drawImage
+						(
+							monsterImage,					//Specifies the image, canvas, or video element to use
+							32 * enemies[r][rp].spritenum,	//Optional. The x coordinate where to start clipping
+							32 * enemies[r][rp].rownumber,	//Optional. The y coordinate where to start clipping
+							32, 							//Optional. The width of the clipped image
+							32,								//Optional. The height of the clipped imag
+							enemies[r][rp].x,				//The x coordinate where to place the image on the canvas
+							enemies[r][rp].y,				//The y coordinate where to place the image on the canvas
+							32, 							//Optional. The width of the image to use (stretch or reduce the image)
+							32								//Optional. The height of the image to use (stretch or reduce the image)
+						);
+					}
+				}
+			}
+			
+			for(var i = 0; i < enemybullet.length; i++) 
+			{
+				enemybullet[i].x -= enemybullet[i].mdx * 5;
+				enemybullet[i].y -= enemybullet[i].mdy * 5;
+				
+				ctx.fillStyle = "#FF0000";
+				ctx.fillRect(enemybullet[i].x, enemybullet[i].y, 8, 10);
+						
+				var killbullet = false;
+						
+				if (enemybullet[i].x <= (hero.x + 30) && hero.x <= (enemybullet[i].x + 4)
+				&& enemybullet[i].y <= (hero.y + 30) && hero.y <= (enemybullet[i].y + 4))
+				{
+					hero.x = canvas.width / 2;
+					hero.y = canvas.height * 0.89;
+					lives--;
+					
+					if(lives <= 0)
+					{
+						soundManager.play("geegee");
+					}
+					
+					killbullet = true;
+					soundManager.play("pDied");
+				}
+				
+				if(enemybullet[i].x > canvas.width || enemybullet[i].x < 0 
+				|| enemybullet[i].y > canvas.height - 64 || enemybullet[i].y < 0
+				|| killbullet) 
+				{
+					var index = enemybullet.indexOf(enemybullet[i]);
+					if (index > -1)
+						enemybullet.splice(index, 1);
+				}
+			}
+			
+			for(var i = 0; i < bullet.length; i++) 
+			{
+				bullet[i].x -= bullet[i].mdx * 10;
+				bullet[i].y -= bullet[i].mdy * 10;
+				
+				ctx.fillStyle = "#FFFFFF";
+				ctx.fillRect(bullet[i].x, bullet[i].y, 8, 10);
+				
+				var killbullet = false;
+				
+				for (var r = 0; r < enemies.length; r++) 	//Rivi
+				{
+					for (var rp = 0; rp < enemies[r].length; rp++) //Rivipituus
+					{
+						if (bullet[i].x <= (enemies[r][rp].x + 30) && enemies[r][rp].x <= (bullet[i].x + 4)
+						&& bullet[i].y <= (enemies[r][rp].y + 30) && enemies[r][rp].y <= (bullet[i].y + 4))
+						{
+							soundManager.play("invalidikilled");
+						
+							explosions.push
+							({
+								x: enemies[r][rp].x += 14.0,
+								y: enemies[r][rp].y += 30.0,
+								lifetime: 0.5 * 60,
+							})
+						
+							enemies[r][rp].health -= 25;
+							
+							switch(enemies[r][rp].rownumber)
+							{
+								case 0:
+								{
+									points += 5;
+									strPoints = zeroFill(points + 5,  4);
+								}
+								case 1:
+								{
+									points += 15;
+									strPoints = zeroFill(points + 15,  4);
+								}
+								case 2:
+								{
+									points += 25;
+									strPoints = zeroFill(points + 25,  4);
+								}
+							}
+							
+							if(enemies[r][rp].health <= 0)
+							{				
+								var index = enemies[r].indexOf(enemies[r][rp]);
+								if (index > -1)
+									enemies[r].splice(index, 1);
+							}
+							
+							killbullet = true;
+						}
+					}
+				}
+				
+				if(bullet[i].x > canvas.width || bullet[i].x < 0 
+				|| bullet[i].y > canvas.height || bullet[i].y < 0 
+				|| killbullet) 
+				{
+					var index = bullet.indexOf(bullet[i]);
+					if (index > -1)
+					{
+						bullet.splice(index, 1);
+					}
+				}
+			}
+
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText("SCORE <1>", 0, 0);
+			
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText(strPoints, 30, 25);
+			
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText("HI-SCORE", canvas.width / 2.5, 0);
+			
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText("0000", canvas.width / 2.3, 25);
+			
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText("SCORE <2>", canvas.width - 120, 0);
+			
+			ctx.fillStyle = "#FFFFFF";
+			ctx.font = "24px Monospace";
+			ctx.textAlign = "left";
+			ctx.textBaseline = "top";
+			ctx.fillText(lives, 6, canvas.height - 40);
+		
+			if(lives == 0)
+			{
+				ctx.fillStyle = "#FF0000";
+				ctx.font = "30px Courier New";
+				ctx.textAlign = "left";
+				ctx.textBaseline = "top";
+				ctx.fillText("GAME OVER", canvas.width / 2.8, 55);
+				
+				ctx.fillStyle = "#FF0000";
+				ctx.font = "26px Courier New";
+				ctx.textAlign = "left";
+				ctx.textBaseline = "top";
+				ctx.fillText("R TO RESTART", canvas.width / 2.9, 80);
+			}
+			
+			for(i = 0; i < lives; i++)
+			{
+				ctx.drawImage
+				(
+					monsterImage,
+					32 * 0,
+					32 * 3,
+					32,
+					32,
+					32 * i + 32,
+					canvas.height - 40,
+					32,
+					32
+				);
+			}
+			
+			ctx.fillStyle = "#2ECC71";
+			ctx.fillRect(0, canvas.width * 0.93, canvas.width, 5);
+		}
+	}
+	
+	function zeroFill(number, width)
+	{
+		width -= number.toString().length;
+		if (width > 0)
+		{
+			return new Array( width + (/\./.test( number ) ? 2 : 1) ).join( '0' ) + number;
+		}
+		return number + "";
+	}
+
+	function main() 
+	{
+		var now = Date.now();
+		var delta = now - then;
+
+		update(delta / 1000);
+		render();
+
+		then = now;
+
+		requestAnimationFrame(main);
+	}
+	
+	var w = window;
+	requestAnimationFrame = w.requestAnimationFrame || w.webkitRequestAnimationFrame || w.msRequestAnimationFrame || w.mozRequestAnimationFrame;
+
+	var then = Date.now();
+	reset();
+	main();
+</script>
+</body>
+</html>
